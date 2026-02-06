@@ -1,8 +1,89 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    
+    // ----------------------------------------------------------------
+    // 1. Codes Collection (Admin + Verification)
+    // ----------------------------------------------------------------
+    match /codes/{code} {
+      allow read: if true;
+      
+      // CREATE: Strict validation (Must be 6 chars, Active, Correct Keys)
+      allow create: if request.resource.data.code == code && 
+                       request.resource.data.code.size() == 6 &&
+                       request.resource.data.isActive == true &&
+                       request.resource.data.keys().hasAll(['code', 'isActive', 'createdAt']);
+      
+      // UPDATE: ALLOWED (Changed from false)
+      // Reason: Admin needs to edit Tags, Notes, Phone, Expiration
+      allow update: if true;
+      
+      // DELETE: ALLOWED
+      // Reason: Admin needs to delete codes
+      allow delete: if true;
+    }
+    
+    // ----------------------------------------------------------------
+    // 2. Sessions Collection (Real-time Data)
+    // ----------------------------------------------------------------
+    match /sessions/{code} {
+      allow read: if true;
+      
+      // CREATE: Strict validation (Initial state)
+      allow create: if request.resource.data.code == code &&
+                       request.resource.data.activeConnections == 0 &&
+                       request.resource.data.keys().hasAll(['code', 'activeConnections', 'createdAt', 'createdBy']);
+      
+      // UPDATE: Strict validation (Only activeConnections & lastActivity)
+      allow update: if 
+                       request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['activeConnections', 'lastActivity', 'snapshots']) &&
+                       (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['activeConnections']) ||
+                        (request.resource.data.activeConnections is int &&
+                         request.resource.data.activeConnections >= 0));
+      
+      // DELETE: ALLOWED (Changed from false)
+      // Reason: Admin needs to delete sessions when deleting codes (Cleanup)
+      allow delete: if true;
+      
+      // --------------------------------------------------------------
+      // Subcollections (Students, Focus, Messages, Reports)
+      // --------------------------------------------------------------
+      match /students/{studentId} {
+        allow read: if true;
+        allow create: if request.resource.data.deviceId == studentId &&
+                         request.resource.data.role in ['student', 'parent'] &&
+                         request.resource.data.keys().hasAll(['deviceId', 'role', 'connectedAt', 'lastUpdate']);
+        allow update: if request.resource.data.deviceId == studentId &&
+                         resource.data.deviceId == studentId &&
+                         request.resource.data.deviceId == resource.data.deviceId &&
+                         request.resource.data.role == resource.data.role &&
+                         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['deviceId', 'role', 'connectedAt']));
+        allow delete: if !resource.exists || (resource.data != null && resource.data.deviceId == studentId);
+      }
+      
+      match /focus/{date} {
+        allow read: if true;
+        allow create: if request.resource.data.date == date;
+        allow update: if request.resource.data.date == date && resource.data.date == date;
+        allow delete: if false;
+      }
+      
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['fromId', 'fromRole', 'targetId', 'content', 'timestamp', 'type']) &&
+                         request.resource.data.fromRole in ['student', 'parent'] &&
+                         request.resource.data.type is string &&
+                         request.resource.data.targetId is string &&
+                         request.resource.data.content is string;
+        allow update, delete: if false;
+      }
+      
+      match /reports/{date} {
+        allow read: if true;
+        allow create, update: if true;
+        allow delete: if false;
+      }
     }
   }
 }

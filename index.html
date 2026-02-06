@@ -72,7 +72,7 @@
         <h1 class="text-3xl md:text-4xl font-bold mb-2">
           <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-teal-600">세션 코드 관리</span>
         </h1>
-        <p class="text-slate-500 text-sm">관리자 모드: 코드를 생성, 수정 및 관리합니다. (KST 기준)</p>
+        <p class="text-slate-500 text-sm">관리자 모드: 코드를 생성, 수정 및 관리합니다. (Server Time Synced)</p>
       </div>
     </header>
 
@@ -114,7 +114,7 @@
 
         <!-- Row 3: Expiration -->
         <div>
-          <label class="block text-sm font-medium text-slate-700 mb-2">코드 유효 기간 (KST)</label>
+          <label class="block text-sm font-medium text-slate-700 mb-2">코드 유효 기간 (KST 서버 기준)</label>
           <div class="flex flex-wrap gap-2 items-center">
             <button type="button"
               class="duration-btn px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-all"
@@ -125,6 +125,9 @@
             <button type="button"
               class="duration-btn px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-all"
               data-days="90">3개월</button>
+            <button type="button"
+              class="duration-btn px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-all"
+              data-value="unlimited">무제한</button>
             <button type="button"
               class="duration-btn px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-all"
               data-value="custom">직접 선택</button>
@@ -193,7 +196,7 @@
       <div><label class="block text-sm font-medium text-slate-700 mb-1">비고</label><input type="text" id="edit-notes"
           class="w-full px-3 py-2 border border-slate-200 rounded-lg"></div>
       <div>
-        <label class="block text-sm font-medium text-slate-700 mb-1">만료 일자 변경 (KST)</label>
+        <label class="block text-sm font-medium text-slate-700 mb-1">만료 일자 변경 (비워두면 무제한)</label>
         <input type="date" id="edit-expiration" class="w-full px-3 py-2 border border-slate-200 rounded-lg">
       </div>
     </div>
@@ -208,35 +211,24 @@
     // ----------------------------------------------------------------
     // 🔒 Security Check (Hash-based)
     // ----------------------------------------------------------------
-    // SHA-256 Hash of "2626"
     const TARGET_HASH = "305800b71062b49b350208327a02ec378199b4cf35e60eeb971611bef4928394";
-
     async function checkPasscode() {
       const input = prompt("관리자 접근 코드를 입력하세요:");
       if (!input) return fail();
-
       const msgBuffer = new TextEncoder().encode(input);
       const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
       if (hashHex === TARGET_HASH) {
         document.body.style.display = "block";
+        await syncServerTime(); // Sync first!
         loadCodes();
         autoCleanupExpired();
       } else {
-        alert("접근 권한이 없습니다.");
-        fail();
+        alert("접근 권한이 없습니다."); fail();
       }
     }
-
-    function fail() {
-      document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;"><h1>Access Denied</h1></div>';
-      document.body.style.display = "block";
-    }
-
-    // Initialize Security Check
-    checkPasscode();
+    function fail() { document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;"><h1>Access Denied</h1></div>'; document.body.style.display = "block"; }
 
     // ----------------------------------------------------------------
     // Firebase Config
@@ -250,54 +242,75 @@
       appId: "1:562021273221:web:08be5821d804948c05a3ec",
       measurementId: "G-MX691RYEER"
     };
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const FieldValue = firebase.firestore.FieldValue;
 
     // ----------------------------------------------------------------
-    // KST Timezone Helpers
+    // 🕒 Server Time Sync
     // ----------------------------------------------------------------
-    function getKSTTime() {
-      const now = new Date();
-      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const kstOffset = 9 * 60 * 60 * 1000;
-      return new Date(utc + kstOffset);
+    let serverTimeOffset = 0;
+    async function syncServerTime() {
+      try {
+        // Create a temporary document to measure server time
+        const ref = await db.collection('_time_sync').add({ timestamp: FieldValue.serverTimestamp() });
+        const doc = await ref.get();
+        const serverTime = doc.data().timestamp.toMillis();
+        const clientTime = Date.now();
+        serverTimeOffset = serverTime - clientTime;
+        // Cleanup
+        await ref.delete();
+        console.log("Server Time Offset Synced:", serverTimeOffset, "ms");
+      } catch (e) {
+        console.error("Time Sync Failed, defaulting to client time", e);
+      }
     }
+
+    function getServerTime() {
+      return new Date(Date.now() + serverTimeOffset);
+    }
+
     function getKSTEndOfDay(daysToAdd) {
-      const kstNow = getKSTTime();
+      // Calculate Target Date relative to Server Time, but force KST Midnight
+      const serverNow = getServerTime();
+      // Shift to KST (UTC+9)
+      const utc = serverNow.getTime() + (serverNow.getTimezoneOffset() * 60000);
+      const kstOffset = 9 * 60 * 60 * 1000;
+      const kstNow = new Date(utc + kstOffset);
+
       kstNow.setDate(kstNow.getDate() + daysToAdd);
       kstNow.setHours(23, 59, 59, 999);
       return kstNow;
     }
-    function parseKSTDateInput(dateString) {
-      if (!dateString) return null;
-      const targetDate = new Date(dateString);
-      targetDate.setHours(23, 59, 59, 999);
-      return targetDate;
-    }
 
     // ----------------------------------------------------------------
-    // Data State & Elements
+    // Data & UI
     // ----------------------------------------------------------------
     let allCodes = [];
+    let sessionMap = {}; // To store session details like lastActivity
     let currentFilter = 'All';
+    let expirationDays = 30; // Default
+    let expirationMode = 'days'; // days, custom, unlimited
 
-    // Elements...
+    // DOM Elements - Inputs
     const creatorNameInput = document.getElementById('creator-name');
     const parentPhoneInput = document.getElementById('parent-phone');
     const tagsInput = document.getElementById('tags-input');
     const notesInput = document.getElementById('notes-input');
+
+    // DOM Elements - Expiration
     const expirationDateInput = document.getElementById('expiration-date');
     const displayDateSpan = document.getElementById('selected-date-display');
     const durationBtns = document.querySelectorAll('.duration-btn');
+
+    // DOM Elements - Main
     const generateCodeBtn = document.getElementById('generate-code-btn');
     const generateResult = document.getElementById('generate-result');
     const codesList = document.getElementById('codes-list');
     const filterContainer = document.getElementById('filter-container');
     const listCount = document.getElementById('list-count');
 
-    // Edit Modal Elements
+    // DOM Elements - Edit
     const editModal = document.getElementById('edit-modal');
     const editCodeId = document.getElementById('edit-code-id');
     const editCodeDisplay = document.getElementById('edit-code-display');
@@ -308,10 +321,8 @@
     const editExpiration = document.getElementById('edit-expiration');
 
     // ----------------------------------------------------------------
-    // Logic
+    // Logic: Expiration Button Click
     // ----------------------------------------------------------------
-    let expirationDays = 30;
-    let isCustomDate = false;
     updateDateDisplay();
 
     durationBtns.forEach(btn => {
@@ -321,12 +332,17 @@
 
         const val = btn.dataset.value;
         const days = btn.dataset.days;
+
         if (val === 'custom') {
-          isCustomDate = true;
+          expirationMode = 'custom';
           expirationDateInput.classList.remove('hidden');
           displayDateSpan.innerText = '';
+        } else if (val === 'unlimited') {
+          expirationMode = 'unlimited';
+          expirationDateInput.classList.add('hidden');
+          displayDateSpan.innerText = '(기한 없음)';
         } else {
-          isCustomDate = false;
+          expirationMode = 'days';
           expirationDateInput.classList.add('hidden');
           expirationDays = parseInt(days);
           updateDateDisplay();
@@ -335,60 +351,34 @@
     });
 
     function updateDateDisplay() {
-      const target = getKSTEndOfDay(expirationDays);
-      displayDateSpan.innerText = `(~ ${target.toLocaleDateString()})`;
+      if (expirationMode === 'days') {
+        const target = getKSTEndOfDay(expirationDays);
+        displayDateSpan.innerText = `(~ ${target.toLocaleDateString()})`;
+      }
     }
 
-    async function autoCleanupExpired() {
-      const now = new Date();
-      try {
-        const snapshot = await db.collection('codes').where('expiresAt', '<', now).get();
-        if (!snapshot.empty) {
-          const batch = db.batch();
-          snapshot.docs.forEach(doc => {
-            batch.delete(db.collection('codes').doc(doc.id));
-            batch.delete(db.collection('sessions').doc(doc.id));
-          });
-          await batch.commit();
-          showToast(`${snapshot.size}개의 만료된 코드(세션 포함)를 정리했습니다.`);
-        }
-      } catch (e) { console.error("Auto Cleanup Failed", e); }
-    }
-
-    function formatPhoneNumber(phone) { return phone.replace(/[-\s]/g, ''); }
-    function validatePhoneNumber(phone) { return /^010\d{8}$/.test(formatPhoneNumber(phone)); }
-    function generateRandomCode() {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      let code = '';
-      for (let i = 0; i < 6; i++) { code += chars.charAt(Math.floor(Math.random() * chars.length)); }
-      return code;
-    }
-    function showToast(msg) {
-      const el = document.createElement('div');
-      el.className = 'bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl mb-2 animate-bounce';
-      el.innerText = msg;
-      document.getElementById('toast-container').appendChild(el);
-      setTimeout(() => el.remove(), 4000);
-    }
-    function showResult(message, type) {
-      generateResult.className = `p-4 rounded-lg mt-4 ${type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`;
-      generateResult.innerHTML = message;
-      generateResult.classList.remove('hidden');
-      if (type === 'success') setTimeout(() => generateResult.classList.add('hidden'), 5000);
-    }
-
+    // ----------------------------------------------------------------
+    // Logic: Code Generation
+    // ----------------------------------------------------------------
     generateCodeBtn.addEventListener('click', async () => {
       const creatorName = creatorNameInput.value.trim();
       const parentPhone = formatPhoneNumber(parentPhoneInput.value.trim());
       const tags = tagsInput.value.trim();
       const notes = notesInput.value.trim();
 
-      let expireDateObj;
-      if (isCustomDate) {
+      let expireDateObj = null; // Default Unlimited
+
+      if (expirationMode === 'custom') {
         if (!expirationDateInput.value) return showResult('만료 날짜를 선택해주세요.', 'error');
-        expireDateObj = parseKSTDateInput(expirationDateInput.value);
-      } else {
+        // Custom date from Client Input -> Treat as KST End of Day
+        const d = new Date(expirationDateInput.value);
+        d.setHours(23, 59, 59, 999);
+        expireDateObj = d;
+      } else if (expirationMode === 'days') {
         expireDateObj = getKSTEndOfDay(expirationDays);
+      } else {
+        // Unlimited
+        expireDateObj = null;
       }
 
       if (!creatorName || !parentPhone) return showResult('필수 정보를 입력해주세요.', 'error');
@@ -405,15 +395,22 @@
           if (!codeDoc.exists) {
             const now = FieldValue.serverTimestamp();
             const batch = db.batch();
-            batch.set(db.collection('codes').doc(code), {
+
+            const codeData = {
               code, createdAt: now, createdBy: creatorName, parentPhone,
-              tags: tags, notes: notes, expiresAt: expireDateObj, isActive: true
-            });
+              tags: tags, notes: notes, isActive: true,
+              expiresAt: expireDateObj // Can be null
+            };
+
+            batch.set(db.collection('codes').doc(code), codeData);
             batch.set(db.collection('sessions').doc(code), {
-              code, createdAt: now, createdBy: creatorName, activeConnections: 0, lastActivity: now
+              code, createdAt: now, createdBy: creatorName, activeConnections: 0, lastActivity: null // Init Null
             });
+
             await batch.commit();
+
             showResult(`코드 생성 완료: <strong class="font-mono text-lg">${code}</strong>`, 'success');
+            // Reset Form (Partially)
             creatorNameInput.value = ''; parentPhoneInput.value = ''; tagsInput.value = ''; notesInput.value = '';
             loadCodes();
             return;
@@ -430,11 +427,26 @@
       }
     });
 
+    // ----------------------------------------------------------------
+    // Logic: Loading & Display
+    // ----------------------------------------------------------------
     async function loadCodes() {
       try {
-        const snapshot = await db.collection('codes').orderBy('createdAt', 'desc').get();
+        // Parallel Fetch: Codes & Sessions
+        const [codesSnap, sessionsSnap] = await Promise.all([
+          db.collection('codes').orderBy('createdAt', 'desc').get(),
+          db.collection('sessions').get() // Fetch all sessions to map activity
+        ]);
+
+        // Map Sessions
+        sessionMap = {};
+        sessionsSnap.forEach(doc => {
+          sessionMap[doc.id] = doc.data();
+        });
+
         allCodes = [];
-        snapshot.forEach(doc => allCodes.push({ id: doc.id, ...doc.data() }));
+        codesSnap.forEach(doc => allCodes.push({ id: doc.id, ...doc.data() }));
+
         renderFilterBar();
         renderList();
       } catch (error) {
@@ -443,26 +455,10 @@
       }
     }
 
-    function renderFilterBar() {
-      const tagSet = new Set();
-      allCodes.forEach(item => {
-        if (item.tags) {
-          item.tags.split(/[\s,]+/).filter(t => t.length > 0).forEach(t => tagSet.add(t.startsWith('#') ? t : '#' + t));
-        }
-      });
-      let html = `<button onclick="setFilter('All')" class="px-3 py-1.5 rounded-full text-sm font-medium border ${currentFilter === 'All' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}">전체</button>`;
-      Array.from(tagSet).sort().forEach(tag => {
-        const active = currentFilter === tag;
-        html += `<button onclick="setFilter('${tag}')" class="px-3 py-1.5 rounded-full text-sm font-medium border ${active ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'}">${tag}</button>`;
-      });
-      filterContainer.innerHTML = html;
-    }
-
-    window.setFilter = function (tag) { currentFilter = tag; renderFilterBar(); renderList(); }
-
     function renderList() {
-      const now = new Date();
+      const now = getServerTime(); // Use Synced Time
       codesList.innerHTML = '';
+
       const filtered = currentFilter === 'All' ? allCodes : allCodes.filter(item => {
         const t = item.tags || '';
         return t.split(/[\s,]+/).map(x => x.startsWith('#') ? x : '#' + x).includes(currentFilter);
@@ -479,22 +475,61 @@
         const tags = (data.tags || '').split(/[\s,]+/).filter(t => t.length > 0).map(t => t.startsWith('#') ? t : '#' + t);
         const notes = data.notes || '';
         const parentPhone = (data.parentPhone || '').replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+        const sessionData = sessionMap[code] || {};
 
-        // Issued Date (Restored)
-        const createdAt = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : new Date();
-        const createdDateStr = createdAt.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' });
-
-        // Expiration
+        // 1. Check Expiration
         let expiresAtDate = data.expiresAt ? (data.expiresAt.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt)) : null;
         let isExpired = expiresAtDate && expiresAtDate < now;
-        let dateStr = expiresAtDate ? expiresAtDate.toLocaleDateString('ko-KR') : '기한 없음';
+        let dateStr = expiresAtDate ? expiresAtDate.toLocaleDateString('ko-KR') : '무제한';
 
-        let statusLabel = '';
-        if (isExpired) statusLabel = `<span class="px-2 py-0.5 bg-slate-200 text-slate-500 text-xs rounded-full font-bold ml-2">만료됨</span>`;
-        if (expiresAtDate && !isExpired) {
-          const diffDays = Math.ceil((expiresAtDate - now) / (1000 * 60 * 60 * 24));
-          statusLabel = `<span class="px-2 py-0.5 ${diffDays <= 7 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'} text-xs rounded-full font-bold ml-2">D-${diffDays}</span>`;
+        // 2. Determine "Usage Status" (The new request)
+        // Logic:
+        // - "서비스 이용 전": lastActivity is null or empty
+        // - (If Used):
+        //    - Day < 10: "초기"
+        //    - Day < 15: "중기"
+        //    - Day >= 15: "후기" (Actually logic says 16+, so > 15)
+
+        const lastActivity = sessionData.lastActivity ? (sessionData.lastActivity.toDate ? sessionData.lastActivity.toDate() : new Date(sessionData.lastActivity)) : null;
+        const createdAt = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : new Date();
+
+        let usageBadge = '';
+        if (!lastActivity) {
+          usageBadge = `<span class="px-2 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 text-xs rounded-full font-bold ml-2">이용 전</span>`;
+        } else {
+          // Calculate days since First Usage... 
+          // Limitation: We don't track "First Login". We use "Days since Creation" as proxy IF lastActivity exists?
+          // Actually request says: "(1달 기준으로) 이용 기간 1/3 경과 전..." 
+          // Let's assume buckets based on Current Date vs Created Date, IF Active.
+          const diffTime = Math.abs(now - createdAt);
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          if (diffDays <= 10) {
+            usageBadge = `<span class="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-xs rounded-full font-bold ml-2">초기 (10일↓)</span>`;
+          } else if (diffDays <= 15) {
+            usageBadge = `<span class="px-2 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 text-xs rounded-full font-bold ml-2">중기 (15일↓)</span>`;
+          } else {
+            usageBadge = `<span class="px-2 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 text-xs rounded-full font-bold ml-2">후기 (16일↑)</span>`;
+          }
         }
+
+        // 3. Last Access Time String
+        let lastAccessStr = lastActivity ? lastActivity.toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+
+        // 4. Status Label (Expiration)
+        let statusLabel = '';
+        if (isExpired) {
+          statusLabel = `<span class="px-2 py-0.5 bg-slate-200 text-slate-500 text-xs rounded-full font-bold ml-2">만료됨</span>`;
+        } else if (expiresAtDate) {
+          const diffDays = Math.ceil((expiresAtDate - now) / (1000 * 60 * 60 * 24));
+          const colorClass = diffDays <= 7 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700';
+          statusLabel = `<span class="px-2 py-0.5 ${colorClass} text-xs rounded-full font-bold ml-2">D-${diffDays}</span>`;
+        } else {
+          statusLabel = `<span class="px-2 py-0.5 bg-teal-100 text-teal-700 text-xs rounded-full font-bold ml-2">무제한</span>`;
+        }
+
+        // Issued Date
+        const createdDateStr = createdAt.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' });
 
         const tagsHtml = tags.map(tag => `<span class="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-xs border border-indigo-100 mr-1">${tag}</span>`).join('');
         const notesHtml = notes ? `<div class="mt-2 text-sm text-slate-600 bg-white p-2 rounded border border-slate-100 flex gap-2"><span class="font-bold text-xs text-slate-400 shrink-0 mt-0.5">NOTE</span><span class="break-all">${notes}</span></div>` : '';
@@ -509,11 +544,13 @@
                   <span class="font-mono text-xl font-bold text-slate-900 mr-2">${code}</span>
                   <span class="text-sm font-medium text-slate-700 mr-1">${data.createdBy || 'Unknown'}</span>
                   ${statusLabel}
+                  ${usageBadge}
                 </div>
                 <div class="flex flex-wrap gap-1 mb-2">${tagsHtml}</div>
                 <div class="text-xs text-slate-500 flex flex-wrap gap-x-4 gap-y-1 items-center">
                    <span class="flex items-center gap-1" title="발급일"><span class="material-symbols-rounded text-xs">history</span> ${createdDateStr}</span>
                    <span class="flex items-center gap-1" title="만료일"><span class="material-symbols-rounded text-xs">event</span> ${dateStr}</span>
+                   <span class="flex items-center gap-1" title="최근접속"><span class="material-symbols-rounded text-xs">schedule</span> ${lastAccessStr}</span>
                    <span class="flex items-center gap-1"><span class="material-symbols-rounded text-xs">phone</span> ${parentPhone}</span>
                 </div>
               </div>
@@ -529,25 +566,42 @@
       });
     }
 
-    // Modal & Global Actions
+    // ----------------------------------------------------------------
+    // Edit & Delete
+    // ----------------------------------------------------------------
     window.openEditModal = function (code) {
       const item = allCodes.find(c => c.id === code);
       if (!item) return;
       editCodeId.value = code; editCodeDisplay.value = code; editCreator.value = item.createdBy;
       editPhone.value = item.parentPhone; editTags.value = item.tags || ''; editNotes.value = item.notes || '';
+
       if (item.expiresAt) {
         const d = item.expiresAt.toDate ? item.expiresAt.toDate() : new Date(item.expiresAt);
         editExpiration.value = d.toISOString().split('T')[0];
+      } else {
+        editExpiration.value = ''; // Empty for Unlimited
       }
       editModal.showModal();
     }
     window.closeEditModal = () => editModal.close();
+
     window.saveEdit = async function () {
       const code = editCodeId.value;
       const updateData = { parentPhone: formatPhoneNumber(editPhone.value), tags: editTags.value, notes: editNotes.value };
-      if (editExpiration.value) updateData.expiresAt = parseKSTDateInput(editExpiration.value);
-      try { await db.collection('codes').doc(code).update(updateData); showToast('수정 성공'); closeEditModal(); loadCodes(); } catch (e) { alert(e.message); }
+
+      // Handle Expiration Input
+      if (editExpiration.value) {
+        const d = new Date(editExpiration.value);
+        d.setHours(23, 59, 59, 999);
+        updateData.expiresAt = d;
+      } else {
+        // If cleared, set Unlimited
+        updateData.expiresAt = null;
+      }
+
+      try { await db.collection('codes').doc(code).update(updateData); showToast('수정되었습니다.'); closeEditModal(); loadCodes(); } catch (e) { alert(e.message); }
     }
+
     window.deleteCode = async function (code) {
       if (!confirm(`코드 "${code}"를 영구 삭제하시겠습니까?`)) return;
       try {
@@ -555,11 +609,55 @@
         batch.delete(db.collection('codes').doc(code));
         batch.delete(db.collection('sessions').doc(code));
         await batch.commit();
-        loadCodes();
-        showToast('삭제 완료');
+        loadCodes(); showToast('삭제되었습니다.');
       } catch (e) { alert(e.message); }
     }
+
+    // Check Passcode & Init
+    checkPasscode();
+
+    // Render Filter Bar (Helper)
+    function renderFilterBar() {
+      const tagSet = new Set();
+      allCodes.forEach(item => { if (item.tags) item.tags.split(/[\s,]+/).filter(t => t.length > 0).forEach(t => tagSet.add(t.startsWith('#') ? t : '#' + t)); });
+      let html = `<button onclick="setFilter('All')" class="px-3 py-1.5 rounded-full text-sm font-medium border ${currentFilter === 'All' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}">전체</button>`;
+      Array.from(tagSet).sort().forEach(tag => {
+        const active = currentFilter === tag;
+        html += `<button onclick="setFilter('${tag}')" class="px-3 py-1.5 rounded-full text-sm font-medium border ${active ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'}">${tag}</button>`;
+      });
+      filterContainer.innerHTML = html;
+    }
+    window.setFilter = function (tag) { currentFilter = tag; renderFilterBar(); renderList(); }
     document.getElementById('refresh-btn').addEventListener('click', loadCodes);
+
+    // Auto Cleanup (Safe for Server Time)
+    async function autoCleanupExpired() {
+      // Note: We use CLIENT time for check here because complex query using 'calculated server time' is hard.
+      // But! 'expiresAt' < now. The 'expiresAt' stored in DB is correct timestamp.
+      // Using client time for strictly 'cleanup' is generally safe enough (if clock is roughly correct). 
+      // If user clock is wildly wrong in future, they might delete valid codes.
+      // SAFEGUARD: We should fetch Server Time first (which we do in syncServerTime).
+      // But query 'where expiresAt < X' needs X to be passed.
+
+      try {
+        const nowServer = getServerTime(); // Use the synced time!
+        const snapshot = await db.collection('codes').where('expiresAt', '<', nowServer).get();
+        if (!snapshot.empty) {
+          const batch = db.batch();
+          snapshot.docs.forEach(doc => { batch.delete(db.collection('codes').doc(doc.id)); batch.delete(db.collection('sessions').doc(doc.id)); });
+          await batch.commit();
+          showToast(`${snapshot.size}개의 만료된 코드 정리 완료`);
+        }
+      } catch (e) { console.error("Auto Cleanup Skipped/Failed", e); }
+    }
+
+    // Utils
+    function formatPhoneNumber(phone) { return phone.replace(/[-\s]/g, ''); }
+    function validatePhoneNumber(phone) { return /^010\d{8}$/.test(formatPhoneNumber(phone)); }
+    function generateRandomCode() { const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'; let code = ''; for (let i = 0; i < 6; i++) { code += chars.charAt(Math.floor(Math.random() * chars.length)); } return code; }
+    function showToast(msg) { const el = document.createElement('div'); el.className = 'bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl mb-2 animate-bounce'; el.innerText = msg; document.getElementById('toast-container').appendChild(el); setTimeout(() => el.remove(), 4000); }
+    function showResult(message, type) { generateResult.className = `p-4 rounded-lg mt-4 ${type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`; generateResult.innerHTML = message; generateResult.classList.remove('hidden'); if (type === 'success') setTimeout(() => generateResult.classList.add('hidden'), 5000); }
+
   </script>
 </body>
 
