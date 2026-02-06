@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>세션 코드 관리 - 순공시간</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <link href="https://fonts.googleapis.com" rel="preconnect"/>
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet"/>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: "#6366f1",
+            "primary-dark": "#4f46e5",
+            "background-light": "#f3f4f6",
+            "card-light": "#ffffff",
+          },
+          fontFamily: {
+            sans: ['"Inter"', '"Noto Sans KR"', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .code-item {
+      transition: all 0.2s;
+    }
+    .code-item:hover {
+      transform: translateY(-2px);
+    }
+  </style>
+</head>
+<body class="bg-background-light min-h-screen p-4 font-sans">
+  
+  <div class="max-w-6xl mx-auto">
+    
+    <!-- Header -->
+    <header class="mb-8">
+      <h1 class="text-3xl md:text-4xl font-bold mb-2">
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-teal-600">세션 코드 관리</span>
+      </h1>
+    </header>
+
+    <!-- Code Generation Section -->
+    <section class="mb-8 bg-card-light rounded-xl shadow-sm border border-slate-200 p-6">
+      <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+        <span class="material-symbols-rounded text-primary">add_circle</span>
+        새 코드 생성
+      </h2>
+      
+      <div class="space-y-4">
+        <div>
+          <label for="creator-name" class="block text-sm font-medium text-slate-700 mb-2">생성자 이름</label>
+          <input 
+            type="text" 
+            id="creator-name" 
+            placeholder="생성할 코드의 학생 이름을 입력하세요"
+            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+          />
+        </div>
+        
+        <div>
+          <label for="parent-phone" class="block text-sm font-medium text-slate-700 mb-2">학부모 전화번호</label>
+          <input 
+            type="tel" 
+            id="parent-phone" 
+            placeholder="01012345678 (하이픈 없이 입력)"
+            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+          />
+          <p class="mt-1 text-xs text-slate-500">알림톡을 받을 학부모 전화번호를 입력하세요</p>
+        </div>
+        
+        <button 
+          id="generate-code-btn" 
+          class="w-full py-3 px-6 bg-primary hover:bg-primary-dark text-white font-semibold rounded-xl transition-all shadow-lg shadow-primary/30 hover:shadow-xl active:scale-[0.98] flex items-center justify-center gap-2"
+        >
+          <span class="material-symbols-rounded">refresh</span>
+          코드 생성
+        </button>
+        
+        <div id="generate-result" class="hidden p-4 rounded-lg"></div>
+      </div>
+    </section>
+
+    <!-- Codes List Section -->
+    <section class="bg-card-light rounded-xl shadow-sm border border-slate-200 p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <span class="material-symbols-rounded text-primary">list</span>
+          생성된 코드 목록
+        </h2>
+        <button 
+          id="refresh-btn" 
+          class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-all flex items-center gap-2"
+        >
+          <span class="material-symbols-rounded">refresh</span>
+          새로고침
+        </button>
+      </div>
+      
+      <div id="codes-list" class="space-y-3">
+        <div class="text-center py-8 text-slate-500">
+          <span class="material-symbols-rounded text-4xl mb-2 block">hourglass_empty</span>
+          로딩 중...
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+
+  <script>
+    // Firebase 설정
+    const firebaseConfig = {
+      apiKey: "AIzaSyDm7PGchG-5o8EzgwbP6ZKy8j6NRlTbJUQ",
+      authDomain: "sungongsigan-platform.firebaseapp.com",
+      projectId: "sungongsigan-platform",
+      storageBucket: "sungongsigan-platform.firebasestorage.app",
+      messagingSenderId: "562021273221",
+      appId: "1:562021273221:web:08be5821d804948c05a3ec",
+      measurementId: "G-MX691RYEER"
+    };
+
+    // Firebase 초기화
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const FieldValue = firebase.firestore.FieldValue;
+
+    // DOM 요소
+    const creatorNameInput = document.getElementById('creator-name');
+    const parentPhoneInput = document.getElementById('parent-phone');
+    const generateCodeBtn = document.getElementById('generate-code-btn');
+    const generateResult = document.getElementById('generate-result');
+    const refreshBtn = document.getElementById('refresh-btn');
+    const codesList = document.getElementById('codes-list');
+    
+    // 전화번호 포맷팅 (하이픈 제거)
+    function formatPhoneNumber(phone) {
+      return phone.replace(/[-\s]/g, '');
+    }
+    
+    // 전화번호 유효성 검사
+    function validatePhoneNumber(phone) {
+      const cleaned = formatPhoneNumber(phone);
+      return /^010\d{8}$/.test(cleaned);
+    }
+
+    // 6자리 영숫자 코드 생성
+    function generateRandomCode() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let code = '';
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return code;
+    }
+
+    // 코드 생성
+    generateCodeBtn.addEventListener('click', async () => {
+      const creatorName = creatorNameInput.value.trim();
+      const parentPhone = formatPhoneNumber(parentPhoneInput.value.trim());
+      
+      if (!creatorName) {
+        showResult('생성자 이름을 입력해주세요.', 'error');
+        return;
+      }
+      
+      if (!parentPhone) {
+        showResult('학부모 전화번호를 입력해주세요.', 'error');
+        return;
+      }
+      
+      if (!validatePhoneNumber(parentPhone)) {
+        showResult('올바른 전화번호 형식이 아닙니다. (01012345678 형식)', 'error');
+        return;
+      }
+
+      generateCodeBtn.disabled = true;
+      generateCodeBtn.innerHTML = '<span class="material-symbols-rounded animate-spin">refresh</span> 생성 중...';
+
+      try {
+        let code;
+        let attempts = 0;
+        const maxAttempts = 100;
+
+        // 중복되지 않는 코드 생성
+        while (attempts < maxAttempts) {
+          code = generateRandomCode();
+          
+          // codes 컬렉션에서 중복 체크
+          const codeDoc = await db.collection('codes').doc(code).get();
+          
+          if (!codeDoc.exists) {
+            // 고유한 코드 발견
+            const now = FieldValue.serverTimestamp();
+            
+            // codes 컬렉션에 저장 (사용자 이름, 생성 시간, 전화번호 포함)
+            await db.collection('codes').doc(code).set({
+              code: code,
+              createdAt: now,
+              createdBy: creatorName,
+              parentPhone: parentPhone,
+              isActive: true
+            });
+
+            // sessions 컬렉션에 세션 생성
+            await db.collection('sessions').doc(code).set({
+              code: code,
+              createdAt: now,
+              createdBy: creatorName,
+              activeConnections: 0,
+              lastActivity: now
+            });
+
+            showResult(`코드가 생성되었습니다: <strong class="font-mono text-lg">${code}</strong>`, 'success');
+            creatorNameInput.value = '';
+            parentPhoneInput.value = '';
+            loadCodes();
+            return;
+          }
+          
+          attempts++;
+        }
+
+        showResult('코드 생성에 실패했습니다. 다시 시도해주세요.', 'error');
+      } catch (error) {
+        console.error('코드 생성 오류:', error);
+        showResult('코드 생성 중 오류가 발생했습니다: ' + error.message, 'error');
+      } finally {
+        generateCodeBtn.disabled = false;
+        generateCodeBtn.innerHTML = '<span class="material-symbols-rounded">refresh</span> 코드 생성';
+      }
+    });
+
+    // 결과 메시지 표시
+    function showResult(message, type) {
+      generateResult.className = `p-4 rounded-lg ${type === 'success' 
+        ? 'bg-green-50 border border-green-200 text-green-700' 
+        : 'bg-red-50 border border-red-200 text-red-700'}`;
+      generateResult.innerHTML = message;
+      generateResult.classList.remove('hidden');
+      
+      if (type === 'success') {
+        setTimeout(() => {
+          generateResult.classList.add('hidden');
+        }, 5000);
+      }
+    }
+
+    // 코드 목록 로드
+    async function loadCodes() {
+      codesList.innerHTML = '<div class="text-center py-8 text-slate-500"><span class="material-symbols-rounded text-4xl mb-2 block">hourglass_empty</span>로딩 중...</div>';
+      
+      try {
+        const snapshot = await db.collection('codes')
+          .orderBy('createdAt', 'desc')
+          .get();
+        
+        if (snapshot.empty) {
+          codesList.innerHTML = '<div class="text-center py-8 text-slate-500"><span class="material-symbols-rounded text-4xl mb-2 block">inbox</span>생성된 코드가 없습니다.</div>';
+          return;
+        }
+
+        codesList.innerHTML = '';
+        
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const code = doc.id;
+          const createdAt = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : null;
+          const createdBy = data.createdBy || '알 수 없음';
+          const parentPhone = data.parentPhone || '미등록';
+          
+          const formattedDate = createdAt 
+            ? createdAt.toLocaleString('ko-KR', { 
+                year: 'numeric', 
+                month: '2-digit', 
+                day: '2-digit', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              })
+            : '알 수 없음';
+          
+          // 전화번호 포맷팅 (표시용)
+          const formattedPhone = parentPhone !== '미등록' 
+            ? parentPhone.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3')
+            : parentPhone;
+          
+          const codeItem = document.createElement('div');
+          codeItem.className = 'code-item bg-slate-50 rounded-lg p-4 border border-slate-200';
+          codeItem.innerHTML = `
+            <div class="flex items-center justify-between">
+              <div class="flex-1">
+                <div class="flex items-center gap-3 mb-2">
+                  <span class="font-mono text-xl font-bold text-slate-900">${code}</span>
+                </div>
+                <div class="flex items-center gap-4 text-sm text-slate-600 flex-wrap">
+                  <span class="flex items-center gap-1">
+                    <span class="material-symbols-rounded text-sm">person</span>
+                    ${createdBy}
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="material-symbols-rounded text-sm">phone</span>
+                    ${formattedPhone}
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="material-symbols-rounded text-sm">schedule</span>
+                    ${formattedDate}
+                  </span>
+                </div>
+              </div>
+              <button 
+                class="px-3 py-1 text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded-lg transition-all flex items-center gap-1"
+                onclick="deleteCode('${code}')"
+              >
+                <span class="material-symbols-rounded text-sm">delete</span>
+                삭제
+              </button>
+            </div>
+          `;
+          codesList.appendChild(codeItem);
+        });
+      } catch (error) {
+        console.error('코드 목록 로드 오류:', error);
+        codesList.innerHTML = '<div class="text-center py-8 text-red-500">코드 목록을 불러오는 중 오류가 발생했습니다.</div>';
+      }
+    }
+
+    // 코드 삭제
+    async function deleteCode(code) {
+      if (!confirm(`코드 "${code}"를 삭제하시겠습니까?`)) {
+        return;
+      }
+
+      try {
+        // codes 컬렉션에서 삭제
+        await db.collection('codes').doc(code).delete();
+        
+        // sessions 컬렉션에서도 삭제 (선택적)
+        // await db.collection('sessions').doc(code).delete();
+        
+        showResult(`코드 "${code}"가 삭제되었습니다.`, 'success');
+        loadCodes();
+      } catch (error) {
+        console.error('코드 삭제 오류:', error);
+        showResult('코드 삭제 중 오류가 발생했습니다: ' + error.message, 'error');
+      }
+    }
+
+    // 새로고침 버튼
+    refreshBtn.addEventListener('click', () => {
+      loadCodes();
+    });
+
+    // Enter 키로 코드 생성
+    creatorNameInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        parentPhoneInput.focus();
+      }
+    });
+    
+    parentPhoneInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        generateCodeBtn.click();
+      }
+    });
+
+    // 초기 로드
+    loadCodes();
+
+    // 실시간 업데이트 (선택적)
+    db.collection('codes')
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(() => {
+        loadCodes();
+      }, (error) => {
+        console.error('실시간 업데이트 오류:', error);
+      });
+  </script>
+</body>
+</html>

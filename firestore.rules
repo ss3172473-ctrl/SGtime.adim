@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ---------------------------------------------------------
+    // ⚠️ SECURITY WARNING
+    // This configuration allows ANYONE to read and write codes.
+    // Since there is no Authentication implemented in the HTML,
+    // we must allow public access for the app to function.
+    // ---------------------------------------------------------
+
+    match /codes/{code} {
+      // Allow anyone to create, read, and delete codes
+      allow read, write: if true;
+    }
+    
+    match /sessions/{session} {
+      // Allow anyone to create/manage sessions
+      allow read, write: if true;
+    }
+  }
+}
