@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
-  <meta charset="utf-8"/>
-  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
   <title>세션 코드 관리 - 순공시간</title>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
-  <link href="https://fonts.googleapis.com" rel="preconnect"/>
-  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com" rel="preconnect" />
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap"
+    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0"
+    rel="stylesheet" />
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -30,23 +34,37 @@
     };
   </script>
   <style>
+    body {
+      display: none;
+    }
+
+    /* Hide body until auth check */
     .code-item {
       transition: all 0.2s;
     }
+
     .code-item:hover {
       transform: translateY(-2px);
     }
+
+    .expired-item {
+      opacity: 0.6;
+      background-color: #f3f4f6 !important;
+      border-color: #e5e7eb !important;
+    }
   </style>
 </head>
+
 <body class="bg-background-light min-h-screen p-4 font-sans">
-  
+
   <div class="max-w-6xl mx-auto">
-    
+
     <!-- Header -->
     <header class="mb-8">
       <h1 class="text-3xl md:text-4xl font-bold mb-2">
         <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-teal-600">세션 코드 관리</span>
       </h1>
+      <p class="text-slate-500 text-sm">관리자 모드: 코드를 생성하고 관리합니다.</p>
     </header>
 
     <!-- Code Generation Section -->
@@ -55,57 +73,90 @@
         <span class="material-symbols-rounded text-primary">add_circle</span>
         새 코드 생성
       </h2>
-      
+
       <div class="space-y-4">
-        <div>
-          <label for="creator-name" class="block text-sm font-medium text-slate-700 mb-2">생성자 이름</label>
-          <input 
-            type="text" 
-            id="creator-name" 
-            placeholder="생성할 코드의 학생 이름을 입력하세요"
-            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-          />
+        <!-- Row 1: Basic Info -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="creator-name" class="block text-sm font-medium text-slate-700 mb-2">생성자 이름 (학생)</label>
+            <input type="text" id="creator-name" placeholder="예: 홍길동"
+              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all" />
+          </div>
+          <div>
+            <label for="parent-phone" class="block text-sm font-medium text-slate-700 mb-2">학부모 전화번호</label>
+            <input type="tel" id="parent-phone" placeholder="01012345678"
+              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all" />
+          </div>
         </div>
-        
-        <div>
-          <label for="parent-phone" class="block text-sm font-medium text-slate-700 mb-2">학부모 전화번호</label>
-          <input 
-            type="tel" 
-            id="parent-phone" 
-            placeholder="01012345678 (하이픈 없이 입력)"
-            class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-          />
-          <p class="mt-1 text-xs text-slate-500">알림톡을 받을 학부모 전화번호를 입력하세요</p>
+
+        <!-- Row 2: Tags & Notes -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="tags-input" class="block text-sm font-medium text-slate-700 mb-2">그룹 태그</label>
+            <input type="text" id="tags-input" placeholder="#중등반 #수학A (공백 구분)"
+              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all" />
+          </div>
+          <div>
+            <label for="notes-input" class="block text-sm font-medium text-slate-700 mb-2">비고</label>
+            <input type="text" id="notes-input" placeholder="특이사항 입력"
+              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all" />
+          </div>
         </div>
-        
-        <button 
-          id="generate-code-btn" 
-          class="w-full py-3 px-6 bg-primary hover:bg-primary-dark text-white font-semibold rounded-xl transition-all shadow-lg shadow-primary/30 hover:shadow-xl active:scale-[0.98] flex items-center justify-center gap-2"
-        >
+
+        <!-- Row 3: Expiration -->
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-2">코드 유효 기간</label>
+          <div class="flex flex-wrap gap-2 items-center">
+            <button type="button"
+              class="duration-btn px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-all"
+              data-days="7">1주일</button>
+            <button type="button"
+              class="duration-btn px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium transition-all ring-2 ring-primary ring-offset-1"
+              data-days="30">1개월 (기본)</button>
+            <button type="button"
+              class="duration-btn px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-all"
+              data-days="90">3개월</button>
+            <button type="button"
+              class="duration-btn px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-all"
+              data-value="custom">직접 선택</button>
+
+            <input type="date" id="expiration-date"
+              class="hidden px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ml-2" />
+            <span id="selected-date-display" class="text-sm text-slate-500 ml-2 font-medium"></span>
+          </div>
+        </div>
+
+        <button id="generate-code-btn"
+          class="w-full py-3 px-6 bg-primary hover:bg-primary-dark text-white font-semibold rounded-xl transition-all shadow-lg shadow-primary/30 hover:shadow-xl active:scale-[0.98] flex items-center justify-center gap-2 mt-2">
           <span class="material-symbols-rounded">refresh</span>
           코드 생성
         </button>
-        
-        <div id="generate-result" class="hidden p-4 rounded-lg"></div>
+
+        <div id="generate-result" class="hidden p-4 rounded-lg mt-4"></div>
       </div>
     </section>
 
     <!-- Codes List Section -->
     <section class="bg-card-light rounded-xl shadow-sm border border-slate-200 p-6">
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
           <span class="material-symbols-rounded text-primary">list</span>
           생성된 코드 목록
         </h2>
-        <button 
-          id="refresh-btn" 
-          class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-all flex items-center gap-2"
-        >
-          <span class="material-symbols-rounded">refresh</span>
-          새로고침
-        </button>
+        <div class="flex gap-2">
+          <button id="delete-expired-btn"
+            class="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 font-medium rounded-lg transition-all flex items-center gap-2 text-sm border border-red-200">
+            <span class="material-symbols-rounded text-lg">delete_sweep</span>
+            만료 코드 일괄 삭제
+          </button>
+          <button id="refresh-btn"
+            class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-all flex items-center gap-2 text-sm">
+            <span class="material-symbols-rounded text-lg">refresh</span>
+            새로고침
+          </button>
+        </div>
       </div>
-      
+
       <div id="codes-list" class="space-y-3">
         <div class="text-center py-8 text-slate-500">
           <span class="material-symbols-rounded text-4xl mb-2 block">hourglass_empty</span>
@@ -116,9 +167,27 @@
 
   </div>
 
-
   <script>
-    // Firebase 설정
+    // ----------------------------------------------------------------
+    // 🔒 Security Check (Simple Frontend)
+    // ----------------------------------------------------------------
+    (function () {
+      const ADMIN_CODE = "2626";
+      const input = prompt("관리자 접근 코드를 입력하세요:");
+      if (input === ADMIN_CODE) {
+        document.body.style.display = "block";
+      } else {
+        alert("접근 권한이 없습니다.");
+        window.location.reload(); // Reload loops until correct
+        document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;"><h1>Access Denied</h1></div>';
+        document.body.style.display = "block";
+        throw new Error("Access Denied"); // Stop execution
+      }
+    })();
+
+    // ----------------------------------------------------------------
+    // Firebase Config
+    // ----------------------------------------------------------------
     const firebaseConfig = {
       apiKey: "AIzaSyDm7PGchG-5o8EzgwbP6ZKy8j6NRlTbJUQ",
       authDomain: "sungongsigan-platform.firebaseapp.com",
@@ -129,31 +198,83 @@
       measurementId: "G-MX691RYEER"
     };
 
-    // Firebase 초기화
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const FieldValue = firebase.firestore.FieldValue;
 
-    // DOM 요소
+    // ----------------------------------------------------------------
+    // DOM Elements
+    // ----------------------------------------------------------------
     const creatorNameInput = document.getElementById('creator-name');
     const parentPhoneInput = document.getElementById('parent-phone');
+    const tagsInput = document.getElementById('tags-input');
+    const notesInput = document.getElementById('notes-input');
+    const expirationDateInput = document.getElementById('expiration-date');
+    const displayDateSpan = document.getElementById('selected-date-display');
+    const durationBtns = document.querySelectorAll('.duration-btn');
+
     const generateCodeBtn = document.getElementById('generate-code-btn');
     const generateResult = document.getElementById('generate-result');
     const refreshBtn = document.getElementById('refresh-btn');
+    const deleteExpiredBtn = document.getElementById('delete-expired-btn');
     const codesList = document.getElementById('codes-list');
-    
-    // 전화번호 포맷팅 (하이픈 제거)
+
+    // ----------------------------------------------------------------
+    // Expiration Logic
+    // ----------------------------------------------------------------
+    let expirationDays = 30; // Default 1 Month
+    let isCustomDate = false;
+
+    // 초기 날짜 표시
+    updateDateDisplay();
+
+    durationBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        // Style Reset
+        durationBtns.forEach(b => {
+          b.className = 'duration-btn px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-all';
+        });
+        // Select Style
+        btn.className = 'duration-btn px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium transition-all ring-2 ring-primary ring-offset-1';
+
+        const val = btn.dataset.value;
+        const days = btn.dataset.days;
+
+        if (val === 'custom') {
+          isCustomDate = true;
+          expirationDateInput.classList.remove('hidden');
+          displayDateSpan.innerText = '';
+        } else {
+          isCustomDate = false;
+          expirationDateInput.classList.add('hidden');
+          expirationDays = parseInt(days);
+          updateDateDisplay();
+        }
+      });
+    });
+
+    function updateDateDisplay() {
+      const date = new Date();
+      date.setDate(date.getDate() + expirationDays);
+      displayDateSpan.innerText = `(~ ${date.toLocaleDateString()})`;
+    }
+
+    expirationDateInput.addEventListener('change', () => {
+      // Custom date selected
+    });
+
+    // ----------------------------------------------------------------
+    // Utils
+    // ----------------------------------------------------------------
     function formatPhoneNumber(phone) {
       return phone.replace(/[-\s]/g, '');
     }
-    
-    // 전화번호 유효성 검사
+
     function validatePhoneNumber(phone) {
       const cleaned = formatPhoneNumber(phone);
       return /^010\d{8}$/.test(cleaned);
     }
 
-    // 6자리 영숫자 코드 생성
     function generateRandomCode() {
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       let code = '';
@@ -163,26 +284,44 @@
       return code;
     }
 
-    // 코드 생성
+    function showResult(message, type) {
+      generateResult.className = `p-4 rounded-lg mt-4 ${type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`;
+      generateResult.innerHTML = message;
+      generateResult.classList.remove('hidden');
+      if (type === 'success') setTimeout(() => generateResult.classList.add('hidden'), 5000);
+    }
+
+    // ----------------------------------------------------------------
+    // Actions
+    // ----------------------------------------------------------------
+
+    // Create Code
     generateCodeBtn.addEventListener('click', async () => {
       const creatorName = creatorNameInput.value.trim();
       const parentPhone = formatPhoneNumber(parentPhoneInput.value.trim());
-      
-      if (!creatorName) {
-        showResult('생성자 이름을 입력해주세요.', 'error');
-        return;
-      }
-      
-      if (!parentPhone) {
-        showResult('학부모 전화번호를 입력해주세요.', 'error');
-        return;
-      }
-      
-      if (!validatePhoneNumber(parentPhone)) {
-        showResult('올바른 전화번호 형식이 아닙니다. (01012345678 형식)', 'error');
-        return;
+      const tags = tagsInput.value.trim();
+      const notes = notesInput.value.trim();
+
+      // Calculate Expiration
+      let expireDateObj;
+      if (isCustomDate) {
+        if (!expirationDateInput.value) {
+          showResult('만료 날짜를 선택해주세요.', 'error');
+          return;
+        }
+        expireDateObj = new Date(expirationDateInput.value);
+        expireDateObj.setHours(23, 59, 59, 999); // End of day
+      } else {
+        expireDateObj = new Date();
+        expireDateObj.setDate(expireDateObj.getDate() + expirationDays);
       }
 
+      // Validation
+      if (!creatorName) return showResult('생성자 이름을 입력해주세요.', 'error');
+      if (!parentPhone) return showResult('학부모 전화번호를 입력해주세요.', 'error');
+      if (!validatePhoneNumber(parentPhone)) return showResult('올바른 전화번호 형식이 아닙니다.', 'error');
+
+      // Loading State
       generateCodeBtn.disabled = true;
       generateCodeBtn.innerHTML = '<span class="material-symbols-rounded animate-spin">refresh</span> 생성 중...';
 
@@ -191,27 +330,25 @@
         let attempts = 0;
         const maxAttempts = 100;
 
-        // 중복되지 않는 코드 생성
         while (attempts < maxAttempts) {
           code = generateRandomCode();
-          
-          // codes 컬렉션에서 중복 체크
           const codeDoc = await db.collection('codes').doc(code).get();
-          
+
           if (!codeDoc.exists) {
-            // 고유한 코드 발견
             const now = FieldValue.serverTimestamp();
-            
-            // codes 컬렉션에 저장 (사용자 이름, 생성 시간, 전화번호 포함)
+
+            // Save to Firestore
             await db.collection('codes').doc(code).set({
               code: code,
               createdAt: now,
               createdBy: creatorName,
               parentPhone: parentPhone,
+              tags: tags,           // New Field
+              notes: notes,         // New Field
+              expiresAt: expireDateObj, // New Field
               isActive: true
             });
 
-            // sessions 컬렉션에 세션 생성
             await db.collection('sessions').doc(code).set({
               code: code,
               createdAt: now,
@@ -221,168 +358,181 @@
             });
 
             showResult(`코드가 생성되었습니다: <strong class="font-mono text-lg">${code}</strong>`, 'success');
+
+            // Reset Form (Leave Expiration as is)
             creatorNameInput.value = '';
             parentPhoneInput.value = '';
+            tagsInput.value = '';
+            notesInput.value = '';
             loadCodes();
             return;
           }
-          
           attempts++;
         }
-
-        showResult('코드 생성에 실패했습니다. 다시 시도해주세요.', 'error');
+        showResult('코드 생성 실패. 다시 시도해주세요.', 'error');
       } catch (error) {
-        console.error('코드 생성 오류:', error);
-        showResult('코드 생성 중 오류가 발생했습니다: ' + error.message, 'error');
+        console.error('Error:', error);
+        showResult('오류 발생: ' + error.message, 'error');
       } finally {
         generateCodeBtn.disabled = false;
         generateCodeBtn.innerHTML = '<span class="material-symbols-rounded">refresh</span> 코드 생성';
       }
     });
 
-    // 결과 메시지 표시
-    function showResult(message, type) {
-      generateResult.className = `p-4 rounded-lg ${type === 'success' 
-        ? 'bg-green-50 border border-green-200 text-green-700' 
-        : 'bg-red-50 border border-red-200 text-red-700'}`;
-      generateResult.innerHTML = message;
-      generateResult.classList.remove('hidden');
-      
-      if (type === 'success') {
-        setTimeout(() => {
-          generateResult.classList.add('hidden');
-        }, 5000);
-      }
-    }
+    // Delete Expired Codes
+    deleteExpiredBtn.addEventListener('click', async () => {
+      if (!confirm('기간이 만료된 코드를 모두 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
 
-    // 코드 목록 로드
+      const originalText = deleteExpiredBtn.innerHTML;
+      deleteExpiredBtn.disabled = true;
+      deleteExpiredBtn.innerText = '삭제 중...';
+
+      try {
+        const now = new Date();
+        // Firestore query for expired codes
+        const snapshot = await db.collection('codes').where('expiresAt', '<', now).get();
+
+        if (snapshot.empty) {
+          alert('만료된 코드가 없습니다.');
+        } else {
+          // Batch delete
+          const batch = db.batch();
+          let count = 0;
+          snapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+            count++;
+          });
+
+          await batch.commit();
+          alert(`${count}개의 만료된 코드를 삭제했습니다.`);
+          loadCodes();
+        }
+      } catch (error) {
+        console.error('Batch delete error:', error);
+        alert('삭제 중 오류 발생: ' + error.message);
+      } finally {
+        deleteExpiredBtn.disabled = false;
+        deleteExpiredBtn.innerHTML = originalText;
+      }
+    });
+
+    // Load List
     async function loadCodes() {
-      codesList.innerHTML = '<div class="text-center py-8 text-slate-500"><span class="material-symbols-rounded text-4xl mb-2 block">hourglass_empty</span>로딩 중...</div>';
-      
+      codesList.innerHTML = '<div class="text-center py-8 text-slate-500">로딩 중...</div>';
+
       try {
         const snapshot = await db.collection('codes')
           .orderBy('createdAt', 'desc')
           .get();
-        
+
         if (snapshot.empty) {
-          codesList.innerHTML = '<div class="text-center py-8 text-slate-500"><span class="material-symbols-rounded text-4xl mb-2 block">inbox</span>생성된 코드가 없습니다.</div>';
+          codesList.innerHTML = '<div class="text-center py-8 text-slate-500">생성된 코드가 없습니다.</div>';
           return;
         }
 
         codesList.innerHTML = '';
-        
+        const now = new Date();
+
         snapshot.forEach(doc => {
           const data = doc.data();
           const code = doc.id;
-          const createdAt = data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : null;
           const createdBy = data.createdBy || '알 수 없음';
-          const parentPhone = data.parentPhone || '미등록';
-          
-          const formattedDate = createdAt 
-            ? createdAt.toLocaleString('ko-KR', { 
-                year: 'numeric', 
-                month: '2-digit', 
-                day: '2-digit', 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              })
-            : '알 수 없음';
-          
-          // 전화번호 포맷팅 (표시용)
-          const formattedPhone = parentPhone !== '미등록' 
-            ? parentPhone.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3')
-            : parentPhone;
-          
+          const parentPhone = data.parentPhone || '';
+
+          // Tags Array
+          const tagString = data.tags || '';
+          const tags = tagString.split(/[\s,]+/).filter(t => t.length > 0).map(t => t.startsWith('#') ? t : '#' + t);
+
+          const notes = data.notes || '';
+
+          // Date & Expiration Check
+          let expiresAtDate = data.expiresAt ? (data.expiresAt.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt)) : null;
+          let isExpired = false;
+          let dateStr = '기한 없음';
+
+          if (expiresAtDate) {
+            isExpired = expiresAtDate < now;
+            dateStr = expiresAtDate.toLocaleDateString('ko-KR');
+          }
+
+          // Render Item
           const codeItem = document.createElement('div');
-          codeItem.className = 'code-item bg-slate-50 rounded-lg p-4 border border-slate-200';
+          codeItem.className = `code-item bg-slate-50 rounded-lg p-4 border border-slate-200 relative ${isExpired ? 'expired-item' : ''}`;
+
+          // Badge HTML
+          const tagsHtml = tags.map(tag => `<span class="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-xs font-semibold mr-1 border border-indigo-100">${tag}</span>`).join('');
+
+          // Notes HTML
+          const notesHtml = notes ? `<div class="mt-2 text-sm text-slate-600 bg-white p-2 rounded border border-slate-100 flex gap-2"><span class="font-bold text-xs text-slate-400 shrink-0 mt-0.5">NOTE</span><span>${notes}</span></div>` : '';
+
+          // Status Badge
+          let statusLabel = '';
+          if (isExpired) {
+            statusLabel = `<span class="px-2 py-0.5 bg-slate-200 text-slate-500 text-xs rounded-full font-bold ml-2">만료됨</span>`;
+          } else if (expiresAtDate) {
+            const diffDays = Math.ceil((expiresAtDate - now) / (1000 * 60 * 60 * 24));
+            const colorClass = diffDays <= 7 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700';
+            statusLabel = `<span class="px-2 py-0.5 ${colorClass} text-xs rounded-full font-bold ml-2">D-${diffDays}</span>`;
+          }
+
           codeItem.innerHTML = `
-            <div class="flex items-center justify-between">
-              <div class="flex-1">
-                <div class="flex items-center gap-3 mb-2">
-                  <span class="font-mono text-xl font-bold text-slate-900">${code}</span>
+            <div class="flex flex-col gap-2">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="flex items-center flex-wrap mb-1">
+                    <span class="font-mono text-xl font-bold text-slate-900 mr-1">${code}</span>
+                    <span class="text-sm font-medium text-slate-700">(${createdBy})</span>
+                    ${statusLabel}
+                  </div>
+                  <div class="flex flex-wrap gap-1 mb-2">
+                    ${tagsHtml}
+                  </div>
+                  <div class="text-xs text-slate-400 flex flex-wrap gap-x-3 gap-y-1">
+                     <span class="flex items-center gap-1"><span class="material-symbols-rounded text-xs">event</span> 유효기간: ${dateStr}</span>
+                     <span class="flex items-center gap-1"><span class="material-symbols-rounded text-xs">phone</span> ${parentPhone}</span>
+                  </div>
                 </div>
-                <div class="flex items-center gap-4 text-sm text-slate-600 flex-wrap">
-                  <span class="flex items-center gap-1">
-                    <span class="material-symbols-rounded text-sm">person</span>
-                    ${createdBy}
-                  </span>
-                  <span class="flex items-center gap-1">
-                    <span class="material-symbols-rounded text-sm">phone</span>
-                    ${formattedPhone}
-                  </span>
-                  <span class="flex items-center gap-1">
-                    <span class="material-symbols-rounded text-sm">schedule</span>
-                    ${formattedDate}
-                  </span>
-                </div>
+                <button 
+                  class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                  onclick="deleteCode('${code}')"
+                  title="삭제"
+                >
+                  <span class="material-symbols-rounded">delete</span>
+                </button>
               </div>
-              <button 
-                class="px-3 py-1 text-sm bg-red-100 text-red-700 hover:bg-red-200 rounded-lg transition-all flex items-center gap-1"
-                onclick="deleteCode('${code}')"
-              >
-                <span class="material-symbols-rounded text-sm">delete</span>
-                삭제
-              </button>
+              ${notesHtml}
             </div>
           `;
           codesList.appendChild(codeItem);
         });
       } catch (error) {
-        console.error('코드 목록 로드 오류:', error);
-        codesList.innerHTML = '<div class="text-center py-8 text-red-500">코드 목록을 불러오는 중 오류가 발생했습니다.</div>';
+        console.error('Error:', error);
+        codesList.innerHTML = '<div class="text-center py-8 text-red-500">목록 로드 실패</div>';
       }
     }
 
-    // 코드 삭제
-    async function deleteCode(code) {
-      if (!confirm(`코드 "${code}"를 삭제하시겠습니까?`)) {
-        return;
-      }
-
+    window.deleteCode = async function (code) {
+      if (!confirm(`코드 "${code}"를 삭제하시겠습니까?`)) return;
       try {
-        // codes 컬렉션에서 삭제
         await db.collection('codes').doc(code).delete();
-        
-        // sessions 컬렉션에서도 삭제 (선택적)
-        // await db.collection('sessions').doc(code).delete();
-        
-        showResult(`코드 "${code}"가 삭제되었습니다.`, 'success');
         loadCodes();
-      } catch (error) {
-        console.error('코드 삭제 오류:', error);
-        showResult('코드 삭제 중 오류가 발생했습니다: ' + error.message, 'error');
+      } catch (e) {
+        alert('삭제 실패: ' + e.message);
       }
-    }
+    };
 
-    // 새로고침 버튼
-    refreshBtn.addEventListener('click', () => {
+    refreshBtn.addEventListener('click', loadCodes);
+
+    // Initial Load
+    // (Wait a bit or run immediately)
+    if (document.body.style.display !== 'none') {
       loadCodes();
-    });
-
-    // Enter 키로 코드 생성
-    creatorNameInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        parentPhoneInput.focus();
-      }
-    });
-    
-    parentPhoneInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        generateCodeBtn.click();
-      }
-    });
-
-    // 초기 로드
-    loadCodes();
-
-    // 실시간 업데이트 (선택적)
-    db.collection('codes')
-      .orderBy('createdAt', 'desc')
-      .onSnapshot(() => {
-        loadCodes();
-      }, (error) => {
-        console.error('실시간 업데이트 오류:', error);
-      });
+    } else {
+      // Observer or check visibility
+      // Since prompt is blocking, this runs after display block usually in simple browsers
+      setTimeout(loadCodes, 500);
+    }
   </script>
 </body>
+
 </html>
